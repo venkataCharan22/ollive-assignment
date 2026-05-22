@@ -32,6 +32,11 @@ RUN npm install --omit=dev --workspaces --include-workspace-root \
 COPY --from=build /repo/ingestion/dist ./ingestion/dist
 COPY ingestion/prisma ./ingestion/prisma
 
+# Generate the Prisma client into the runtime's node_modules. The build
+# stage's generated client lives in /repo/node_modules and doesn't carry
+# over — Nest fails on boot with "did not initialize yet" without this.
+RUN cd ingestion && npx prisma generate
+
 WORKDIR /app/ingestion
 
 EXPOSE 4000
