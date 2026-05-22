@@ -1,0 +1,124 @@
+// Ollive ingestion schema.
+//
+// Three top-level entities:
+//   - Conversation: a chat session. Holds the default provider/model and a
+//     status flag so the UI can cancel/archive without deleting history.
+//   - Message: a single user/assistant/system turn shown in the chat UI.
+//   - InferenceLog: the observability record for one LLM call. One row per
+//     call, regardless of streaming. Indexed for the dashboard's hot paths
+//     (latency over time, errors per provider).
+//
+// Design notes:
+//   - InferenceLog.id is the SDK-supplied requestId — gives natural idempotency
+//     on retries from the SDK (`ON CONFLICT (id) DO NOTHING` in worker).
+//   - We keep both compact preview columns (cheap to scan in lists) and the
+//     full output / messages payload (for replay/debug). The dashboard hits
+//     only the preview and aggregate columns.
+//   - `raw` JSON column stores the original event for forward compatibility:
+//     if we add a new metric tomorrow we can backfill from raw without an
+//     SDK redeploy.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String?
+  provider  String
+  model     String
+  status    ConversationStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages       Message[]
+  inferenceLogs  InferenceLog[]
+
+  @@index([status, updatedAt(sort: Desc)])
+}
+
+enum ConversationStatus {
+  ACTIVE
+  CANCELLED
+  ARCHIVED
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  createdAt      DateTime @default(now())
+
+  // Loose link to InferenceLog.id (no FK on purpose).
+  //
+  // The chatbot persists the assistant message as soon as the stream closes,
+  // but the InferenceLog itself is shipped async (SDK → ingest API → Redis
+  // Stream → worker → Postgres). The two arrivals race; a hard FK would
+  // reject the message-write whenever the log hasn't landed yet.
+  //
+  // We make the column a plain @unique string. The worker backfills this
+  // value via UPDATE on the most-recent unlinked ASSISTANT message in the
+  // conversation once it persists the InferenceLog row, so the dashboard
+  // can still pivot from a message to its inference metadata. See
+  // stream-consumer.service.ts.
+  inferenceLogId String?  @unique
+
+  @@index([conversationId, createdAt])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model InferenceLog {
+  // SDK-supplied requestId — see schema header for the idempotency rationale.
+  id             String   @id
+  conversationId String   @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  provider       String
+  model          String
+  status         InferenceStatus
+
+  startedAt      DateTime
+  finishedAt     DateTime
+  latencyMs      Int
+  ttftMs         Int?
+  streamed       Boolean  @default(false)
+
+  promptTokens     Int @default(0)
+  completionTokens Int @default(0)
+  totalTokens      Int @default(0)
+
+  inputPreview   String
+  outputPreview  String
+  output         String?
+
+  errorCode      String?
+  errorMessage   String?
+
+  tags           Json?
+  sdkVersion     String
+  raw            Json
+  receivedAt     DateTime @default(now())
+
+  @@index([conversationId, startedAt])
+  @@index([provider, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+  @@index([startedAt(sort: Desc)])
+}
+
+enum InferenceStatus {
+  OK
+  ERROR
+  CANCELLED
+}

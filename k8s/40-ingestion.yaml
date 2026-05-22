@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion
+  namespace: ollive
+  labels:
+    app: ingestion
+spec:
+  # Replicas can scale freely because Redis Streams' consumer groups dispatch
+  # each event to exactly one worker. Postgres connection pool is the only
+  # thing to watch — see ARCHITECTURE.md.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ingestion
+  template:
+    metadata:
+      labels:
+        app: ingestion
+    spec:
+      containers:
+        - name: ingestion
+          image: ollive/ingestion:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: ollive-secrets
+          env:
+            - name: INGESTION_PORT
+              value: "4000"
+            - name: NODE_ENV
+              value: production
+            - name: PII_REDACTION
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 1000m, memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion
+  namespace: ollive
+spec:
+  selector:
+    app: ingestion
+  ports:
+    - port: 4000
+      targetPort: 4000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingestion
+  namespace: ollive
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingestion
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

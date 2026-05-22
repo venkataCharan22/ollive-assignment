@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot
+  namespace: ollive
+  labels:
+    app: chatbot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: chatbot
+  template:
+    metadata:
+      labels:
+        app: chatbot
+    spec:
+      containers:
+        - name: chatbot
+          image: ollive/chatbot:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: ollive-secrets
+          env:
+            - name: INGESTION_URL
+              value: http://ingestion.ollive.svc.cluster.local:4000
+            - name: NEXT_PUBLIC_INGESTION_URL
+              value: http://ingestion.ollive.svc.cluster.local:4000
+            - name: DEFAULT_PROVIDER
+              value: mock
+            - name: DEFAULT_MODEL
+              value: mock-fast
+            - name: PII_REDACTION
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /api/models
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 1000m, memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot
+  namespace: ollive
+spec:
+  selector:
+    app: chatbot
+  ports:
+    - port: 80
+      targetPort: 3000

@@ -1,0 +1,20 @@
+{
+  "name": "@ollive/llm-sdk",
+  "version": "0.1.0",
+  "description": "Lightweight wrapper around LLM provider SDKs that captures inference metadata and ships logs to the Ollive ingestion API.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@google/generative-ai": "^0.21.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}

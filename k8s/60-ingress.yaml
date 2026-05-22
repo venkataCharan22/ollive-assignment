@@ -1,0 +1,26 @@
+# Ingress example for nginx-ingress / Traefik. Adjust the host + className for
+# your cluster. If you don't have an ingress controller, use:
+#   kubectl -n ollive port-forward svc/chatbot 3000:80
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ollive
+  namespace: ollive
+  annotations:
+    # SSE needs long-lived connections — disable proxy buffering.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ollive.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chatbot
+                port:
+                  number: 80

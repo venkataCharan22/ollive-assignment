@@ -1,0 +1,24 @@
+{
+  "name": "ollive-assignment",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ollive hiring assignment — multi-provider LLM chatbot with real-time inference logging, ingestion pipeline, and observability dashboards.",
+  "workspaces": [
+    "sdk",
+    "ingestion",
+    "chatbot"
+  ],
+  "scripts": {
+    "build:sdk": "npm run build -w @ollive/llm-sdk",
+    "build:ingestion": "npm run build -w @ollive/ingestion",
+    "build:chatbot": "npm run build -w @ollive/chatbot",
+    "build": "npm run build:sdk && npm run build:ingestion && npm run build:chatbot",
+    "dev:ingestion": "npm run start:dev -w @ollive/ingestion",
+    "dev:chatbot": "npm run dev -w @ollive/chatbot",
+    "prisma:migrate": "npm run prisma:migrate -w @ollive/ingestion",
+    "prisma:seed": "npm run prisma:seed -w @ollive/ingestion"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
