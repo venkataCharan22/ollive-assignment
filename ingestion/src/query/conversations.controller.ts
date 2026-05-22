@@ -93,37 +93,66 @@ export class ConversationsController {
     });
     if (!convo) throw new NotFoundException();
 
-    // Loose join: load inference logs by id and zip them onto each message.
-    // (See schema.prisma's comment on Message.inferenceLogId for why we don't
-    // use a Prisma relation here.)
-    const logIds = convo.messages
-      .map((m) => m.inferenceLogId)
-      .filter((id): id is string => !!id);
-    const logs = logIds.length
-      ? await this.prisma.inferenceLog.findMany({
-          where: { id: { in: logIds } },
-          select: {
-            id: true,
-            provider: true,
-            model: true,
-            latencyMs: true,
-            ttftMs: true,
-            promptTokens: true,
-            completionTokens: true,
-            totalTokens: true,
-            status: true,
-            errorMessage: true,
-          },
-        })
-      : [];
-    const byId = new Map(logs.map((l) => [l.id, l]));
-    return {
-      ...convo,
-      messages: convo.messages.map((m) => ({
-        ...m,
-        inferenceLog: m.inferenceLogId ? byId.get(m.inferenceLogId) ?? null : null,
-      })),
-    };
+    // Loose join. Two-stage:
+    //
+    //   1. Prefer the direct FK-like link set by the worker (Message.inferenceLogId).
+    //   2. For any ASSISTANT message without a direct link, fall back to a
+    //      time-nearest match against the conversation's unclaimed logs.
+    //
+    // Why the fallback exists: on Vercel/serverless, the SDK's log POST and
+    // the chatbot's appendMessage POST race. If the log arrives first, the
+    // worker's backfill finds no message to link, no-op. The message lands
+    // afterward and stays unlinked. This read-side stitching covers that
+    // case without coupling the write path to in-order arrival.
+    const allLogs = await this.prisma.inferenceLog.findMany({
+      where: { conversationId: id },
+      select: {
+        id: true,
+        provider: true,
+        model: true,
+        latencyMs: true,
+        ttftMs: true,
+        promptTokens: true,
+        completionTokens: true,
+        totalTokens: true,
+        status: true,
+        errorMessage: true,
+        startedAt: true,
+      },
+      orderBy: { startedAt: "asc" },
+    });
+    const byId = new Map(allLogs.map((l) => [l.id, l]));
+
+    // Logs not yet claimed by any message's direct link.
+    const claimed = new Set(
+      convo.messages.map((m) => m.inferenceLogId).filter((x): x is string => !!x),
+    );
+    const unclaimed = allLogs.filter((l) => !claimed.has(l.id));
+
+    const messages = convo.messages.map((m) => {
+      if (m.inferenceLogId) {
+        return { ...m, inferenceLog: byId.get(m.inferenceLogId) ?? null };
+      }
+      if (m.role !== "ASSISTANT" || unclaimed.length === 0) {
+        return { ...m, inferenceLog: null };
+      }
+      // Pick the unclaimed log closest in time to this message's createdAt.
+      const target = m.createdAt.getTime();
+      let best = unclaimed[0];
+      let bestDiff = Math.abs(best.startedAt.getTime() - target);
+      for (let i = 1; i < unclaimed.length; i += 1) {
+        const diff = Math.abs(unclaimed[i].startedAt.getTime() - target);
+        if (diff < bestDiff) {
+          best = unclaimed[i];
+          bestDiff = diff;
+        }
+      }
+      // Remove so subsequent assistant messages don't reuse this log.
+      unclaimed.splice(unclaimed.indexOf(best), 1);
+      return { ...m, inferenceLog: best };
+    });
+
+    return { ...convo, messages };
   }
 
   @Patch(":id")
