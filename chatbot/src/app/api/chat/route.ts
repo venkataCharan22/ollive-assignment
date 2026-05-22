@@ -100,9 +100,11 @@ export async function POST(req: NextRequest) {
         finishReason = upstreamAbort.signal.aborted ? "aborted" : "error";
         controller.enqueue(sseEvent({ type: "error", message: streamError }));
       } finally {
-        controller.close();
-
-        // Persist what we got — even partial responses are useful for debugging.
+        // Persist BEFORE closing the controller. On serverless runtimes
+        // (Vercel), the function can be torn down the instant the response
+        // body ends — any await after controller.close() risks being killed
+        // mid-flight. Doing this work first costs only a few ms of perceived
+        // latency (the browser is already rendering the streamed text).
         if (assistantBuffer.length > 0) {
           // Note: we intentionally don't pass inferenceLogId here. The
           // worker backfills the link once the InferenceLog row lands.
@@ -122,8 +124,9 @@ export async function POST(req: NextRequest) {
             model: body.model,
           })
           .catch(() => undefined);
-        // Drain log shipments before the lambda-style request can exit.
         await client.flush(2000).catch(() => undefined);
+
+        controller.close();
       }
     },
     cancel() {
