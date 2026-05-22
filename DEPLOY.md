@@ -3,13 +3,53 @@
 The stack splits into:
 
 - **Chatbot** (`chatbot/`) — stateless Next.js → **Vercel**.
-- **Ingestion** (`ingestion/`) — NestJS + Postgres + Redis + background worker → **Railway**.
+- **Ingestion** (`ingestion/`) — NestJS + Postgres + Redis + background worker → **Render** (Blueprint included) or **Railway**.
 
-Total time: ~15 minutes the first time.
+Total time: ~10 minutes the first time. Render is the recommended path (one
+file, all web UI, no CLI hassle). Railway is documented below as a fallback.
 
 ---
 
-## 1. Ingestion on Railway
+## 1. Ingestion on Render (recommended)
+
+A `render.yaml` Blueprint at the repo root defines Postgres + Redis + the
+ingestion service. Three managed resources, all wired together, all free
+tier-compatible.
+
+1. Sign in at https://dashboard.render.com (GitHub login works).
+2. Click **New → Blueprint**.
+3. Pick the `venkataCharan22/ollive-assignment` repo.
+4. Render reads `render.yaml`, shows the three services (`ollive-postgres`,
+   `ollive-redis`, `ollive-ingestion`), and asks you to confirm. Click **Apply**.
+5. Wait ~5 minutes — Render provisions Postgres, Redis, then builds the
+   Dockerfile and runs `prisma migrate deploy` on first start.
+6. When the web service goes green, copy:
+   - the **public URL** of `ollive-ingestion`
+     (e.g. `https://ollive-ingestion-xxxx.onrender.com`)
+   - the **generated `INGESTION_API_KEY`** from the service's "Environment" tab
+7. Plug both into Vercel (see step 2 below).
+
+### Free tier caveats
+
+- **Postgres free** expires after 90 days. Upgrade to the $7/mo Starter plan
+  to keep it past that, or move to a perpetually-free alternative (Neon,
+  Supabase) and update `DATABASE_URL` manually.
+- **Web service free** spins down after 15 min idle. Cold start is ~30s.
+  Fine for a demo; not what you'd ship at scale.
+- **Key Value (Redis) free** caps at 25MB. Our stream is capped at
+  `MAXLEN ~100k`, well under the limit.
+
+### Seed demo data (optional)
+
+```bash
+# Grab DATABASE_URL from Render's dashboard → ollive-postgres → "External Connection".
+DATABASE_URL='<the-external-postgres-url>' \
+  npx --workspace @ollive/ingestion prisma db seed
+```
+
+---
+
+## Alternative: Ingestion on Railway
 
 Railway gives you managed Postgres + Redis + a one-click container deploy.
 
@@ -60,6 +100,8 @@ railway status
 DATABASE_URL='<the railway public postgres url>' \
   npx --workspace @ollive/ingestion prisma db seed
 ```
+
+---
 
 ---
 

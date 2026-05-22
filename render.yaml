@@ -1,0 +1,59 @@
+# Render Blueprint for the ingestion side of Ollive.
+# The chatbot lives on Vercel (different stack); this spec covers Postgres,
+# Redis, and the NestJS ingestion service.
+#
+# To deploy:
+#   1. Push this file to GitHub (already done if you cloned the repo).
+#   2. Sign in at https://dashboard.render.com → New → Blueprint.
+#   3. Connect this repo (venkataCharan22/ollive-assignment).
+#   4. Render reads this file, shows you the three services it will create,
+#      and asks you to confirm. Click "Apply".
+#   5. Wait ~5 minutes for the build + first deploy.
+#   6. Copy the URL of the `ollive-ingestion` web service (looks like
+#      https://ollive-ingestion-xxxx.onrender.com) and the generated
+#      INGESTION_API_KEY (visible in the service's "Environment" tab).
+#   7. Paste both into Vercel (see DEPLOY.md → step 2 → "Update Vercel").
+
+databases:
+  - name: ollive-postgres
+    databaseName: ollive
+    user: ollive
+    plan: free        # 1GB, 90-day expiry. Upgrade to starter ($7/mo) if you keep it.
+    postgresMajorVersion: "16"
+
+services:
+  # Managed Key Value store (Render's Redis-compatible service).
+  - type: keyvalue
+    name: ollive-redis
+    plan: free        # 25MB
+    region: oregon
+    ipAllowList: []   # cluster-internal only, no public exposure
+
+  # The NestJS ingestion API + Redis Streams worker (same process).
+  - type: web
+    name: ollive-ingestion
+    runtime: docker
+    plan: free        # 512MB, sleeps after 15min idle. Fine for a demo.
+    region: oregon
+    dockerfilePath: ./ingestion/Dockerfile
+    dockerContext: .  # repo root — the Dockerfile copies workspace files
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ollive-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: ollive-redis
+          type: keyvalue
+          property: connectionString
+      - key: INGESTION_PORT
+        value: "4000"
+      - key: INGESTION_API_KEY
+        generateValue: true       # Render generates a secret; copy into Vercel
+      - key: PII_REDACTION
+        value: "true"
+      - key: NODE_ENV
+        value: production

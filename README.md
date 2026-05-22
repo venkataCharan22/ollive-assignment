@@ -257,7 +257,14 @@ The stack splits cleanly along a stateful / stateless line:
   serverless functions can't host the worker. Use Railway, Render, Fly.io,
   Hetzner, or any cluster.
 
-### Quickest path (Vercel + Railway)
+### Quickest path (Vercel + Render Blueprint)
+
+A `render.yaml` at the repo root provisions Postgres + Redis + the ingestion
+service in one click — sign in at dashboard.render.com → New → Blueprint →
+pick this repo → Apply. Then copy the generated `INGESTION_API_KEY` and the
+ingestion URL into Vercel. Full walkthrough in [`DEPLOY.md`](DEPLOY.md).
+
+### Alternative: Vercel + Railway
 
 ```bash
 # 1. Push to GitHub.
