@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build -w @ollive/llm-sdk && cd chatbot && next build",
+  "installCommand": "npm install --include=dev --workspaces --include-workspace-root",
+  "outputDirectory": "chatbot/.next",
+  "framework": "nextjs",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- chatbot sdk vercel.json package.json package-lock.json || exit 1"
+}

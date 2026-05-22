@@ -12,3 +12,4 @@ coverage/
 *.tsbuildinfo
 .turbo/
 prisma/migrations/dev.db*
+.vercel
