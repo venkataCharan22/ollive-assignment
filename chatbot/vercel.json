@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd .. && npm install --include=dev --workspaces --include-workspace-root",
+  "buildCommand": "cd .. && npm run build -w @ollive/llm-sdk && cd chatbot && next build",
+  "framework": "nextjs"
+}
