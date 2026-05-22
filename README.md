@@ -1,5 +1,7 @@
 # Ollive — LLM chatbot with real-time inference observability
 
+> **Live demo:** [ollive-assignment.vercel.app](https://ollive-assignment.vercel.app) · **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md) · **Deploy guide:** [DEPLOY.md](DEPLOY.md)
+
 Hiring assignment for **Ollive — Founding Fullstack Engineer**. Multi-provider
 LLM chatbot, custom logging SDK, ingestion pipeline, and observability
 dashboards. One command boots the whole stack.
